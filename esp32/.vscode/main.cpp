@@ -2,46 +2,44 @@
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLE2902.h>
-#include <WiFi.h>
-#include <HTTPClient.h>
 
-#define LED 23
+#define LED 2
+#define RXD2 16
+#define TXD2 17
+
 #define SERVICE_UUID "6e74769c-8bbd-417a-8924-85b8f9e2008d"
 #define CHARACTERISTIC_UUID_RX "be8a0622-ed83-4148-9183-d39134a62821"
 
+// static BLEUUID serviceUUID("4fafc201-1fb5-459e-8fcc-c5c9c331914b");
+// static BLEUUID charUUID("beb5483e-36e1-4688-b7f5-ea07361b26a8");
+
 BLECharacteristic *characteristic;
+BLEScan *pBLEScan;
 
 char ledOnOff = '1';
+int scanTime = 5; //In seconds
 
-String HOST_NAME = "https://smartpantryuepg.herokuapp.com/pantry/add-item/";
-String USER_ID = "612b0e8787a4d2750f4a3268";
+class ServerCallbacks : public BLEServerCallbacks
+{
+	void onConnect(BLEServer *pServer)
+	{
+		Serial.println("Client bluetooth connected");
+	};
 
-// class ServerCallbacks : public BLEServerCallbacks
-// {
-// 	void onConnect(BLEServer *pServer)
-// 	{
-// 		Serial.println("Bluetooth Connected");
-// 	};
-
-// 	void onDisconnect(BLEServer *pServer)
-// 	{
-// 		Serial.println("Bluetooth Connected");
-// 	};
-// };
+	void onDisconnect(BLEServer *pServer)
+	{
+		Serial.println("Client bluetooth disconnected");
+	};
+};
 
 class CharacteristicServerCallbacks : public BLECharacteristicCallbacks
 {
 	void onWrite(BLECharacteristic *pCharacteristic)
 	{
 		std::string rxValue = pCharacteristic->getValue();
-		if (rxValue.length() > 0)
-		{
-			for (int i = 0; i < rxValue.length(); i++)
-			{
-				Serial.print(rxValue[i]);
-			}
-			Serial.println();
-		}
+		Serial.print("Barcode: ");
+		Serial.print(rxValue.c_str());
+		Serial.println();
 		if (rxValue.find("off"))
 		{
 			ledOnOff = '0';
@@ -52,29 +50,13 @@ class CharacteristicServerCallbacks : public BLECharacteristicCallbacks
 		}
 		else
 		{
-			WiFi.begin("Rebecca", "re010716");
-			Serial.print("Waiting for WiFi to connect...");
-			while (WiFi.status() != WL_CONNECTED)
-			{
-				Serial.print(".");
-			}
-			Serial.println(" connected");
-			Serial.println(WiFi.localIP());
-
-			HTTPClient http;
-			String PATH = HOST_NAME + rxValue.c_str() + "/" + USER_ID;
-			http.begin(PATH.c_str());
-			http.GET();
-			http.end();
+			Serial2.write(rxValue.c_str());
 		}
 	};
 };
 
-void setup()
+void btStartBle()
 {
-	Serial.begin(115200);
-	pinMode(LED, OUTPUT);
-
 	// Create the BLE Device
 	BLEDevice::init("SMART_PANTRY");
 	// Create the BLE Server
@@ -104,15 +86,24 @@ void setup()
 	Serial.println("Characteristic defined! Now you can read it in your phone!");
 }
 
+void setup()
+{
+	Serial.begin(115200);
+	Serial2.begin(115200);
+	pinMode(LED, OUTPUT);
+	btStartBle();
+}
+
 void loop()
 {
-	if (ledOnOff == '0')
-	{
-		digitalWrite(LED, HIGH); // turn the LED on (HIGH is the voltage level)
-	}
-	if (ledOnOff == '1')
-	{
-		digitalWrite(LED, LOW); // turn the LED on (HIGH is the voltage level)
-	}
+	digitalWrite(LED, HIGH);
+	delay(1000);
+	BLEScanResults foundDevices = pBLEScan->start(scanTime, false);
+
+	Serial.print("Devices found: ");
+	Serial.println(foundDevices.getCount());
+	Serial.println("Scan done!");
+	pBLEScan->clearResults(); // delete results fromBLEScan buffer to release memory
+	digitalWrite(LED, LOW);
 	delay(1000);
 }
